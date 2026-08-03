@@ -42,11 +42,43 @@ Other test notes:
 - Puppeteer ships its own Chromium (downloaded at install) and launches headless
   with `--no-sandbox` in this VM.
 
-Example full test invocation:
+Example targeted test invocation:
 
 ```
 CI=true SKIP_MODULAR_STARTUP_CHECK=true BROWSERSLIST_IGNORE_OLD_DATA=true yarn test --regex "<path-or-package>"
 ```
+
+### Running the full suite (CI-style) and its known failures
+
+CI runs `yarn test --coverage --regex="./packages/*"` after building **only**
+the `workspace-resolver` prerequisite
+(`yarn workspace @modular-scripts/workspace-resolver build`). To reproduce
+locally, start from that same state or you get spurious failures:
+
+- Free **port 3000** first (a leftover `modular start` dev server makes
+  `start`/`app`/`build` tests fail with _"Something is already running on port
+  3000"_, and jest `--bail` then aborts the whole run). Kill listeners by PID
+  via `lsof -n -iTCP:3000 -sTCP:LISTEN -t`.
+- Remove full-build outputs so `lint.test.ts` isn't polluted (see next section):
+  `rm -rf packages/create-modular-react-app/build packages/modular-scripts/dist-cjs packages/remote-view/dist dist`.
+
+Two suites fail purely from **upstream dependency drift / snapshot pinning**,
+not from the environment, and no single local Node version passes both:
+
+- On **Node 20** (the CI-validated choice and this repo's default), everything
+  passes **except**
+  `packages/create-modular-react-app/src/__tests__/index.test.ts`. Its first
+  case scaffolds with unpinned deps, so the registry now resolves
+  `@testing-library/jest-dom@7`, which requires Node `>=22` and aborts the
+  `yarn add`. This would also fail in CI today.
+- On **Node 22**, that CMRA test passes but
+  `packages/modular-scripts/src/__tests__/app.esbuild.test.ts` fails because the
+  esbuild bundle hashes no longer match snapshots recorded on Node 16/18/20.
+
+Keep Node 20 (matches CI and the recorded snapshots) and treat the single CMRA
+e2e failure as a known upstream-drift issue; don't "fix" it by switching Node or
+editing pins. Everything else — build, dev server, lint, typecheck, and all the
+`modular-scripts` integration suites — passes on Node 20.
 
 ### Build artifact collides with `yarn install`
 
