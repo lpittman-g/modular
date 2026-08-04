@@ -38,8 +38,8 @@ Other test notes:
   full suite is heavy (launches Puppeteer/Chromium). Scope it with
   `--regex <path>` or package names, e.g.
   `yarn test --regex "packages/remote-view/"`.
-- `modular test` is **selective** by default (it only runs workspaces changed
-  vs the default branch), so a bare `yarn modular test <pkg>` can print
+- `modular test` is **selective** by default (it only runs workspaces changed vs
+  the default branch), so a bare `yarn modular test <pkg>` can print
   `No workspaces found in selection`. A `--regex <path>` value overrides this
   (it is passed to Jest as a positional `testPathPattern`, i.e. a path match).
   To pass arguments straight through to Jest for a specific file/dir, use
