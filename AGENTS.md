@@ -2,77 +2,83 @@
 
 ## Cursor Cloud specific instructions
 
-This repo is **Modular** (`modular-scripts`), a Yarn v1 **workspaces monorepo**
-that ships a developer CLI (build/test/lint/start/analyze) plus supporting
-libraries and templates. There is **no long-running application server and no
-database** — the "app" you can run is a scaffolded micro-frontend served by the
-`modular start` dev server. Standard commands live in `package.json`
-(`scripts`), `CONTRIBUTING.md`, and `.github/workflows/{test,integration}.yml`;
-prefer those as the source of truth. Notes below are the non-obvious gotchas.
+### What this repo is
 
-### Environment
+`modular` is JP Morgan's monorepo toolchain for micro-frontends (a CLI plus a
+set of publishable npm packages under `packages/**`). There is **no backend
+service or database** — the "application" is the `modular` CLI and the dev
+server it launches (`modular start`, default port `3000`). Standard commands
+live in `package.json` scripts and `CONTRIBUTING.md`; don't duplicate them, just
+use them (`yarn build`, `yarn lint`, `yarn typecheck`, `yarn test`).
 
-- The update script runs `yarn install` (installs deps, applies `patch-package`
-  patches, installs husky hooks). Puppeteer's Chromium is downloaded during
-  install and is used by browser tests.
-- Node: the VM default (Node 22) works for install/build/lint/test/dev server.
-  CI targets Node 16/18/20; `engines` requires `>=20` among those. Chromium runs
-  headless fine here.
+### Toolchain (Node 20 + Yarn Classic)
 
-### Build (required before running tests)
+- Package manager is **Yarn Classic (v1)**; `yarn.lock` is authoritative. Do not
+  introduce npm/pnpm lockfiles.
+- The repo targets Node `16 || 18 || 20` (CI uses those). The base VM image's
+  default `node` on `PATH` (`/exec-daemon/node`) is **Node 22**, which is _not_
+  a CI-validated version. Interactive shells are configured (via `~/.bashrc`) to
+  run `nvm use 20`, so `node -v` should already report v20 and `yarn` resolves
+  to the Node 20 Yarn Classic. If you ever see Node 22, run `nvm use 20` before
+  building or testing.
 
-- Tests import the compiled `@modular-scripts/workspace-resolver`, so build that
-  prerequisite first: `yarn workspace @modular-scripts/workspace-resolver build`
-  (this is exactly what CI does before `yarn test`). The update script does NOT
-  build it, so run it once per fresh pod.
-- `yarn build` (the full build) additionally compiles CMRA + modular-scripts
-  and, as a publish-prep step, copies remote-view output into
-  `packages/remote-view/dist`.
+### Running tests — non-obvious gotcha (Browserslist)
 
-### GOTCHA: full `yarn build` creates a duplicate workspace
+The pinned `caniuse-lite` is old relative to the current date and prints a
+`caniuse-lite is outdated` **warning to stderr**. Tests that spin up a dev
+server (e.g. `packages/modular-scripts/src/__tests__/start.test.ts`) use a
+harness that treats **any** dev-server stderr output as a fatal error, so they
+fail with that warning alone. Always export `BROWSERSLIST_IGNORE_OLD_DATA=true`
+when running tests/builds to suppress it. Do **not** run
+`npx update-browserslist-db` to "fix" it — that mutates a pinned dependency.
 
-- `yarn build`'s `prepare:remote-view:copy` step writes
-  `packages/remote-view/dist/package.json`, which the `packages/**` workspace
-  glob then picks up as a **second** workspace named
-  `@modular-scripts/remote-view`. This breaks subsequent Yarn/Modular commands
-  with
-  `There are more than one workspace with name "@modular-scripts/remote-view"`
-  and produces a `jest-haste-map: Haste module naming collision` warning.
-- Fix: `rm -rf packages/remote-view/dist` before running `yarn install`,
-  `modular add`, `modular start`, or a full test run. The dir is gitignored, so
-  removing it is safe. If you only need to run tests, prefer building just the
-  workspace-resolver prereq (above) instead of the full `yarn build`.
+Other test notes:
 
-### Running tests
-
-- Tests MUST run serially — the `test` script already uses `--runInBand`
-  (parallelization is not supported). Full suite (as CI): `yarn test`. Note
-  `yarn test` uses `cross-env`; invoke it via a yarn script (or `npx cross-env`)
-  rather than calling `cross-env` directly.
-- `modular test` is **selective** (runs only workspaces changed vs the default
-  branch), so a bare `yarn modular test <pkg>` often reports
-  `No workspaces found in selection`. `--regex` matches test _names_, not paths.
-- To run a specific file/dir, bypass selective logic and pass the path straight
-  to Jest:
-  `yarn modular test --bypass --runInBand --env=node <path/to/test-or-dir>`
-  (e.g. `packages/remote-view/src/__tests__/`).
+- Tests must run single-process; `yarn test` already passes `--runInBand`. The
+  full suite is heavy (launches Puppeteer/Chromium). Scope it with
+  `--regex <path>` or package names, e.g.
+  `yarn test --regex "packages/remote-view/"`.
+- `modular test` is **selective** by default (it only runs workspaces changed
+  vs the default branch), so a bare `yarn modular test <pkg>` can print
+  `No workspaces found in selection`. A `--regex <path>` value overrides this
+  (it is passed to Jest as a positional `testPathPattern`, i.e. a path match).
+  To pass arguments straight through to Jest for a specific file/dir, use
+  `--bypass`, e.g.
+  `yarn modular test --bypass --runInBand --env=node <path/to/test-or-dir>`.
 - The heavy `packages/modular-scripts/src/__tests__/*` integration tests spawn
-  real builds and dev servers on fixed ports (3000/4000); they are slow and, if
-  interrupted, can leave orphaned servers that cause "Something is already
-  running on port …" on the next run.
+  real builds and dev servers on fixed ports (3000/4000); if interrupted they
+  can leave orphaned servers that cause "Something is already running on port …"
+  on the next run.
+- Skip network/update checks with `CI=true SKIP_MODULAR_STARTUP_CHECK=true`.
+- Puppeteer ships its own Chromium (downloaded at install) and launches headless
+  with `--no-sandbox` in this VM.
 
-### Running the app (dev server)
+Example full test invocation:
 
-- Scaffold a micro-frontend, then start it:
-  `yarn modular add <name> --unstable-type app --template app` then
-  `BROWSER=none yarn modular start <name>` (serves on `http://localhost:3000`;
-  set `BROWSER=none` so it doesn't try to open a desktop browser).
-  `modular start` is a yarn/workspace operation, so clear the
-  duplicate-workspace gotcha above first.
+```
+CI=true SKIP_MODULAR_STARTUP_CHECK=true BROWSERSLIST_IGNORE_OLD_DATA=true yarn test --regex "<path-or-package>"
+```
 
-### Integration / E2E (Verdaccio) — optional, heavy
+### Build artifact collides with `yarn install`
 
-- The true publish→install→CLI-runthrough E2E lives in
-  `integration-test-scripts/` and needs a local Verdaccio registry on port 4873
-  (`setupVerdaccio.sh` installs `verdaccio` + `forever` globally). Not needed
-  for normal development or for the checks above.
+`yarn build` copies `dist/modular-scripts-remote-view` into
+`packages/remote-view/dist`, whose `package.json` is also named
+`@modular-scripts/remote-view`. Because workspaces glob `packages/**`, a later
+`yarn install` then fails with _"There are more than one workspace with name
+@modular-scripts/remote-view"_ (and Jest prints a harmless `jest-haste-map`
+naming collision warning). If you need to re-install after building, first
+`rm -rf packages/remote-view/dist`. The startup update script already does this
+before `yarn install`.
+
+### Verifying the environment end to end
+
+The canonical "hello world" is the README Getting Started flow: scaffold a
+project with the local CLI and start its dev server, e.g.
+
+```
+yarn create-modular-react-app /tmp/hello-modular --prefer-offline
+cd /tmp/hello-modular
+BROWSERSLIST_IGNORE_OLD_DATA=true SKIP_MODULAR_STARTUP_CHECK=true yarn start app
+```
+
+then open http://localhost:3000. Editing `packages/app/src/App.tsx` hot-reloads.
