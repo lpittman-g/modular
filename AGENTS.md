@@ -38,6 +38,17 @@ Other test notes:
   full suite is heavy (launches Puppeteer/Chromium). Scope it with
   `--regex <path>` or package names, e.g.
   `yarn test --regex "packages/remote-view/"`.
+- `modular test` is **selective** by default (it only runs workspaces changed vs
+  the default branch), so a bare `yarn modular test <pkg>` can print
+  `No workspaces found in selection`. A `--regex <path>` value overrides this
+  (it is passed to Jest as a positional `testPathPattern`, i.e. a path match).
+  To pass arguments straight through to Jest for a specific file/dir, use
+  `--bypass`, e.g.
+  `yarn modular test --bypass --runInBand --env=node <path/to/test-or-dir>`.
+- The heavy `packages/modular-scripts/src/__tests__/*` integration tests spawn
+  real builds and dev servers on fixed ports (3000/4000); if interrupted they
+  can leave orphaned servers that cause "Something is already running on port …"
+  on the next run.
 - Skip network/update checks with `CI=true SKIP_MODULAR_STARTUP_CHECK=true`.
 - Puppeteer ships its own Chromium (downloaded at install) and launches headless
   with `--no-sandbox` in this VM.
