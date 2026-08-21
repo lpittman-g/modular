@@ -17,10 +17,20 @@ use them (`yarn build`, `yarn lint`, `yarn typecheck`, `yarn test`).
   introduce npm/pnpm lockfiles.
 - The repo targets Node `16 || 18 || 20` (CI uses those). The base VM image's
   default `node` on `PATH` (`/exec-daemon/node`) is **Node 22**, which is _not_
-  a CI-validated version. Interactive shells are configured (via `~/.bashrc`) to
-  run `nvm use 20`, so `node -v` should already report v20 and `yarn` resolves
-  to the Node 20 Yarn Classic. If you ever see Node 22, run `nvm use 20` before
-  building or testing.
+  a CI-validated version. `/exec-daemon` is force-prepended to `PATH` on every
+  command, so a bare `nvm use 20` is **not** enough — the daemon's Node 22 still
+  wins. The Cloud Agent environment therefore installs Node 20 via `nvm` and
+  symlinks `node`/`npm`/`npx`/`yarn` into `/usr/local/cargo/bin` (the only
+  writable directory that precedes `/exec-daemon` on `PATH`), so `node -v`
+  reports v20 and `yarn` is Yarn Classic in every shell. If you ever see Node
+  22, re-run the environment `install` command, or recreate the symlinks
+  manually, e.g.:
+
+  ```
+  export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use 20
+  N20="$(dirname "$(nvm which 20)")"
+  for b in node npm npx yarn yarnpkg corepack; do ln -sf "$N20/$b" "/usr/local/cargo/bin/$b"; done
+  ```
 
 ### Running tests — non-obvious gotcha (Browserslist)
 
