@@ -18,9 +18,11 @@ use them (`yarn build`, `yarn lint`, `yarn typecheck`, `yarn test`).
 - The repo targets Node `16 || 18 || 20` (CI uses those). The base VM image's
   default `node` on `PATH` (`/exec-daemon/node`) is **Node 22**, which is _not_
   a CI-validated version. Interactive shells are configured (via `~/.bashrc`) to
-  run `nvm use 20`, so `node -v` should already report v20 and `yarn` resolves
-  to the Node 20 Yarn Classic. If you ever see Node 22, run `nvm use 20` before
-  building or testing.
+  run `nvm use 20` and put the nvm Node 20 bin directory **ahead of**
+  `/exec-daemon` on `PATH`, so `node -v` should report v20 and `yarn` resolves
+  to the Node 20 Yarn Classic. If you ever see Node 22, run `nvm use 20` and
+  ensure `$NVM_DIR/versions/node/$(nvm version 20)/bin` is first on `PATH`
+  before building or testing.
 
 ### Running tests — non-obvious gotcha (Browserslist)
 
